@@ -1,0 +1,84 @@
+# 실험 메타정보와 실행 환경 설정이다.
+experiment:
+  # 런 디렉터리 이름 prefix로 쓰여 실험 식별에 사용된다.
+  name: mnist_fm_mlp
+  # 모델 출력 해석 방식을 결정한다(fm: v 예측, imf: u 예측).
+  mode: fm
+  # 결과(run 로그/체크포인트/샘플)를 저장할 상위 폴더다.
+  output_dir: runs
+  # 난수 시드를 고정해 실험 재현성을 높인다.
+  seed: 42
+  # 가능한 연산에서 결정론 모드를 강제해 반복 실행 편차를 줄인다.
+  deterministic: true
+  # 선호 디바이스(cuda/cpu)이며, 실제 가능 여부는 코드에서 다시 확인한다.
+  device: cuda
+
+# 데이터 로딩/입력 파이프라인 설정이다.
+data:
+  # MNIST 다운로드/캐시 루트 경로다.
+  root: data
+  # 학습 step당 배치 크기로, 메모리 사용량과 학습 안정성에 직접 영향 준다.
+  batch_size: 128
+  # DataLoader 워커 프로세스 수다.
+  num_workers: 2
+  # CUDA 사용 시 pinned memory를 켜 H2D 전송 효율을 높인다.
+  pin_memory: true
+
+# 벡터장 MLP 아키텍처 설정이다.
+model:
+  # 입력 벡터 차원(MNIST 28x28 flatten)이다.
+  input_dim: 784
+  # 은닉층 너비로 모델 용량을 조절한다.
+  hidden_dim: 512
+  # 백본 MLP 블록 반복 횟수다.
+  num_layers: 3
+  # 시간 임베딩 차원으로, t 조건 정보의 표현력을 조절한다.
+  time_embed_dim: 128
+  # 과적합 완화를 위한 드롭아웃 비율이다.
+  dropout: 0.0
+
+# 최적화 및 학습 루프 관련 설정이다.
+training:
+  # 전체 학습 epoch 수다.
+  epochs: 20
+  # AdamW 학습률이다.
+  lr: 0.001
+  # AdamW weight decay 강도다.
+  weight_decay: 0.0
+  # 0보다 크면 gradient clipping을 적용해 폭주를 완화한다.
+  grad_clip: 1.0
+  # CUDA 환경에서 AMP(혼합정밀도)를 사용할지 여부다.
+  amp: true
+  # 몇 step마다 손실 로그를 기록할지 정한다.
+  log_every: 50
+  # 몇 step마다 샘플 이미지를 생성/저장할지 정한다.
+  sample_every: 500
+  # null이면 epoch 기준 종료, 정수면 해당 global step에서 조기 종료한다.
+  max_steps: null
+
+# 학습 중/사후 샘플링 설정이다.
+sampling:
+  # 샘플 그리드 생성 시 사용할 샘플 배치 크기다.
+  sample_batch_size: 64
+  # 학습 중 모니터링할 NFE 목록이다.
+  nfe_log: [1, 4, 20]
+  # 별도 지정이 없을 때 기본 샘플링 NFE다.
+  nfe_default: 20
+  # 실험에서 허용/권장하는 NFE 후보군이다.
+  nfe_choices: [1, 2, 4, 8, 16, 20, 50]
+
+# Weights & Biases 로깅 설정이다.
+wandb:
+  # wandb 프로젝트 이름이다.
+  project: mnist-flow-matching
+  # 팀/유저 엔티티(없으면 null)다.
+  entity: null
+  # false로 두면 wandb 없이 로컬 로그만 남긴다.
+  enabled: true
+
+# EMA(지수이동평균) 가중치 추적 설정이다.
+ema:
+  # true면 학습 중 EMA shadow 파라미터를 함께 관리한다.
+  use: false
+  # EMA 감쇠 계수(1에 가까울수록 과거 가중치를 더 오래 반영).
+  decay: 0.999

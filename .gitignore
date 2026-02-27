@@ -1,0 +1,36 @@
+# Python virtual environments
+2dFM/
+.venv/
+venv/
+env/
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+
+# Experiment data and outputs
+data/
+runs/
+wandb/
+sample_outputs/
+eval_outputs/
+
+# Checkpoints and weights
+*.pt
+*.pth
+*.ckpt
+
+# Logs
+*.log
+slurm-*.out
+slurm-*.err
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

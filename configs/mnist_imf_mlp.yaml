@@ -1,0 +1,47 @@
+experiment:
+  name: mnist_imf_mlp
+  mode: imf
+  output_dir: runs
+  seed: 42
+  deterministic: true
+  device: cuda
+
+data:
+  root: data
+  batch_size: 64
+  num_workers: 2
+  pin_memory: true
+
+model:
+  input_dim: 784
+  hidden_dim: 1024
+  num_layers: 5
+  time_embed_dim: 256
+  dropout: 0.0
+
+training:
+  epochs: 20
+  lr: 0.00001
+  warmup_epochs: 10
+  weight_decay: 0.0
+  betas: [0.9, 0.95]
+  grad_clip: 1.0
+  amp: true
+  log_every: 50
+  sample_every: 500
+  max_steps: null
+
+sampling:
+  sample_batch_size: 64
+  nfe_log: [1, 2]
+  nfe_default: 1
+  nfe_choices: [1, 2, 4]
+
+wandb:
+  project: mnist-flow-matching
+  entity: null
+  enabled: true
+
+ema:
+  use: false
+  decay: 0.9999
