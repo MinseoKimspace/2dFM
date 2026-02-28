@@ -1,4 +1,5 @@
 # Repository Setup and Sharing
+# Repository Setup and Sharing
 
 This repository is set up to share code, configs, and documentation through GitHub while keeping datasets, checkpoints, and experiment outputs local to each machine.
 
