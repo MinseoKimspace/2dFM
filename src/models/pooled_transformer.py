@@ -1,5 +1,3 @@
-"""Skeleton interfaces for dual-level pooled Transformer variants."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,14 +5,13 @@ from typing import Sequence
 
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
+import math
 from models.transformer import TransformerOutput, VectorFieldTransformer
 
 
 @dataclass
 class DualLevelCodes:
-    """Container for pooled early/late representations."""
-
     early_tokens: torch.Tensor
     late_tokens: torch.Tensor
     early_slots: torch.Tensor
@@ -25,8 +22,6 @@ class DualLevelCodes:
 
 @dataclass
 class DualLevelOutput:
-    """Structured output for a self-guided pooled Transformer wrapper."""
-
     sample: torch.Tensor
     hidden_states: list[torch.Tensor]
     pooled: DualLevelCodes
@@ -36,8 +31,6 @@ class DualLevelOutput:
 
 
 class MAB(nn.Module):
-    """Skeleton for a multihead attention block used by PMA."""
-
     def __init__(
         self,
         dim: int,
@@ -48,21 +41,51 @@ class MAB(nn.Module):
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
-        self.dropout = dropout
         self.ff_mult = ff_mult
+        self.fc_q = nn.Linear(dim, dim)
+        self.fc_k = nn.Linear(dim, dim)
+        self.fc_v = nn.Linear(dim, dim)
+        self.fc_o = nn.Linear(dim, dim)
+        self.mid = nn.Linear(dim, dim * ff_mult)
+        self.end = nn.Linear(dim * ff_mult, dim) 
+        self.dropout = nn.Dropout(dropout)
+        self.ln0 = nn.LayerNorm(dim)
+        self.ln1 = nn.LayerNorm(dim)
+        
+        assert self.dim % self.num_heads == 0
 
     def forward(
         self,
         q: torch.Tensor,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        """Return attended query states with shape `[B, S, D]`."""
-        raise NotImplementedError("Implement MAB attention + FFN update.")
+        Q = self.fc_q(q)
+        K, V = self.fc_k(x), self.fc_v(x)
+        
+
+        dim_split = self.dim // self.num_heads
+        
+        Q_ = torch.cat(Q.split(dim_split, 2), 0)
+        K_ = torch.cat(K.split(dim_split, 2), 0)
+        V_ = torch.cat(V.split(dim_split, 2), 0)
+        
+        A = torch.softmax(Q_.bmm(K_.transpose(1,2)) / math.sqrt(dim_split), 2)
+        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
+        O = self.ln0(O)
+        O = O + F.relu(self.fc_o(O))
+
+
+        identity = O
+        O = self.dropout(O)
+        O = self.ln1(O)
+        O = self.mid(O)
+        O = F.relu(O)
+        O = self.end(O)
+        O = O + identity        
+        return O
 
 
 class PMA(nn.Module):
-    """Skeleton for pooling by multihead attention."""
-
     def __init__(
         self,
         dim: int,
@@ -80,13 +103,10 @@ class PMA(nn.Module):
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        """Pool token set `x` into seed slots with shape `[B, S, D]`."""
         raise NotImplementedError("Implement PMA using learnable seeds and MAB.")
 
 
 class DualLevelPoolingHead(nn.Module):
-    """Skeleton for grouped early/late layer pooling."""
-
     def __init__(
         self,
         num_layers: int,
@@ -113,7 +133,6 @@ class DualLevelPoolingHead(nn.Module):
         hidden_states: list[torch.Tensor],
         indices: Sequence[int],
     ) -> torch.Tensor:
-        """Merge selected hidden states into one grouped token set."""
         raise NotImplementedError("Implement layer grouping and optional layer embeddings.")
 
     def pool_group(
@@ -121,7 +140,6 @@ class DualLevelPoolingHead(nn.Module):
         group_tokens: torch.Tensor,
         level: str,
     ) -> torch.Tensor:
-        """Pool one layer group into slots."""
         raise NotImplementedError("Implement PMA call for the requested level.")
 
     def project_group(
@@ -129,7 +147,6 @@ class DualLevelPoolingHead(nn.Module):
         slots: torch.Tensor,
         level: str,
     ) -> torch.Tensor:
-        """Project pooled slots into a compact code vector."""
         raise NotImplementedError("Implement slot flattening/norm/projection.")
 
     def forward(
@@ -140,8 +157,6 @@ class DualLevelPoolingHead(nn.Module):
 
 
 class SemanticConsistencyHead(nn.Module):
-    """Skeleton for projection and predictor heads used in semantic alignment."""
-
     def __init__(
         self,
         code_dim: int,
@@ -163,8 +178,6 @@ class SemanticConsistencyHead(nn.Module):
 
 
 class DualLevelSelfGuidedTransformer(nn.Module):
-    """Skeleton wrapper around the backbone and dual-level heads."""
-
     def __init__(
         self,
         backbone: VectorFieldTransformer,
@@ -182,7 +195,6 @@ class DualLevelSelfGuidedTransformer(nn.Module):
         t_start: torch.Tensor,
         t_now: torch.Tensor | None = None,
     ) -> TransformerOutput:
-        """Call the backbone with hidden-state extraction enabled."""
         output = self.backbone(
             x_t,
             t_start,
@@ -208,7 +220,6 @@ def semantic_consistency_loss(
     early_pred: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    """Skeleton for the feature-level semantic consistency loss."""
     raise NotImplementedError("Implement stop-grad semantic matching loss.")
 
 
@@ -216,5 +227,4 @@ def collapse_regularization_loss(
     early_shared: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    """Skeleton for collapse-prevention regularization."""
     raise NotImplementedError("Implement variance/covariance or related regularization.")
