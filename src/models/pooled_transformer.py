@@ -101,8 +101,8 @@ class PMA(nn.Module):
         self.num_heads = num_heads
         self.num_seeds = num_seeds
         self.dropout = dropout
-        self.seed = nn.Parameter(torch.Tensor((1, num_seeds, dim)))
-        nn.init.xavier_uniform_(self.random_seed)
+        self.seed = nn.Parameter(torch.empty(1, num_seeds, dim))
+        nn.init.xavier_uniform_(self.seed)
         self.mab = MAB(dim, num_heads, dropout)
 
     def forward(
