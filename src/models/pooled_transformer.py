@@ -98,12 +98,17 @@ class PMA(nn.Module):
         self.num_heads = num_heads
         self.num_seeds = num_seeds
         self.dropout = dropout
+        self.seed = nn.Parameter(torch.Tensor((1, num_seeds, dim)))
+        nn.init.xavier_uniform_(self.random_seed)
+        self.mab = MAB(dim, num_heads, dropout)
 
     def forward(
         self,
         x: torch.Tensor,
     ) -> torch.Tensor:
-        raise NotImplementedError("Implement PMA using learnable seeds and MAB.")
+        batch_size = x.size(0)
+        learnable_s = self.seed.repeat(batch_size, 1, 1)
+        return self.mab(learnable_s, x)
 
 
 class DualLevelPoolingHead(nn.Module):
@@ -133,27 +138,27 @@ class DualLevelPoolingHead(nn.Module):
         hidden_states: list[torch.Tensor],
         indices: Sequence[int],
     ) -> torch.Tensor:
-        raise NotImplementedError("Implement layer grouping and optional layer embeddings.")
+        raise NotImplementedError()
 
     def pool_group(
         self,
         group_tokens: torch.Tensor,
         level: str,
     ) -> torch.Tensor:
-        raise NotImplementedError("Implement PMA call for the requested level.")
+        raise NotImplementedError()
 
     def project_group(
         self,
         slots: torch.Tensor,
         level: str,
     ) -> torch.Tensor:
-        raise NotImplementedError("Implement slot flattening/norm/projection.")
+        raise NotImplementedError()
 
     def forward(
         self,
         hidden_states: list[torch.Tensor],
     ) -> DualLevelCodes:
-        raise NotImplementedError("Implement dual-level early/late pooling.")
+        raise NotImplementedError()
 
 
 class SemanticConsistencyHead(nn.Module):
@@ -174,7 +179,7 @@ class SemanticConsistencyHead(nn.Module):
         """
         Return `(early_shared, late_shared, early_pred)`.
         """
-        raise NotImplementedError("Implement projector and predictor heads.")
+        raise NotImplementedError()
 
 
 class DualLevelSelfGuidedTransformer(nn.Module):
@@ -204,7 +209,7 @@ class DualLevelSelfGuidedTransformer(nn.Module):
             return_dict=True,
         )
         if not isinstance(output, TransformerOutput):
-            raise TypeError("Backbone must return TransformerOutput when return_dict=True.")
+            raise TypeError()
         return output
 
     def forward(
@@ -213,18 +218,18 @@ class DualLevelSelfGuidedTransformer(nn.Module):
         t_start: torch.Tensor,
         t_now: torch.Tensor | None = None,
     ) -> DualLevelOutput:
-        raise NotImplementedError("Implement pooled extraction, projection, and structured return.")
+        raise NotImplementedError()
 
 
 def semantic_consistency_loss(
     early_pred: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    raise NotImplementedError("Implement stop-grad semantic matching loss.")
+    raise NotImplementedError()
 
 
 def collapse_regularization_loss(
     early_shared: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    raise NotImplementedError("Implement variance/covariance or related regularization.")
+    raise NotImplementedError()
