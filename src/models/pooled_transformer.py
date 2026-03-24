@@ -8,6 +8,7 @@ from typing import Sequence
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 import math
 from models.transformer import TransformerOutput, VectorFieldTransformer
 
@@ -259,18 +260,27 @@ class DualLevelSelfGuidedTransformer(nn.Module):
         t_start: torch.Tensor,
         t_now: torch.Tensor | None = None,
     ) -> DualLevelOutput:
-        raise NotImplementedError()
-
+        output = self.extract_hidden_states(x_t, t_start, t_now)
+        hidden_states = output.hidden_states
+        
+        if hidden_states is None:
+            raise ValueError("Backbone returned no hidden_states.")
+    
+        pooled = self.pooling_head(hidden_states)
+        early_shared, late_shared, early_pred = self.consistency_head(pooled.early_code, pooled.late_code)
+        dual_level_output = DualLevelOutput(output.sample, hidden_states, pooled, early_shared, late_shared, early_pred)
+        return dual_level_output
 
 def semantic_consistency_loss(
     early_pred: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    raise NotImplementedError()
-
+    return F.mse_loss(early_pred, late_shared.detach())
 
 def collapse_regularization_loss(
     early_shared: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    raise NotImplementedError()
+    early = torch.max(torch.zeros_like(early_shared[-1]), 1 - torch.sqrt(torch.var(early_shared, 0) + 1e-5)).mean()
+    late = torch.max(torch.zeros_like(early_shared[-1]), 1 - torch.sqrt(torch.var(late_shared, 0) + 1e-5)).mean()
+    return early + late
