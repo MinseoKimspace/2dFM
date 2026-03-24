@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from turtle import hideturtle
+from types import NotImplementedType
 from typing import Sequence
 
 import torch
@@ -110,7 +112,6 @@ class PMA(nn.Module):
         learnable_s = self.seed.repeat(batch_size, 1, 1)
         return self.mab(learnable_s, x)
 
-
 class DualLevelPoolingHead(nn.Module):
     def __init__(
         self,
@@ -131,56 +132,96 @@ class DualLevelPoolingHead(nn.Module):
         self.late_indices = tuple(late_indices)
         self.early_num_seeds = early_num_seeds
         self.late_num_seeds = late_num_seeds
-        self.code_dim = code_dim
+        self.early_pma = PMA(dim, pool_heads, early_num_seeds)
+        self.late_pma = PMA(dim, pool_heads, late_num_seeds)
+        self.early_norm = nn.LayerNorm(code_dim)
+        self.late_norm = nn.LayerNorm(code_dim)
+        self.early_proj = nn.Linear(early_num_seeds * dim, code_dim)
+        self.late_proj = nn.Linear(late_num_seeds * dim, code_dim)
 
     def merge_group(
         self,
         hidden_states: list[torch.Tensor],
         indices: Sequence[int],
     ) -> torch.Tensor:
-        raise NotImplementedError()
+        result = []
+        for i in indices:
+            result.append(hidden_states[i])
+        
+        return torch.concat(result, 1)
 
     def pool_group(
         self,
         group_tokens: torch.Tensor,
         level: str,
     ) -> torch.Tensor:
-        raise NotImplementedError()
+        if level == "early":
+            return self.early_pma(group_tokens)
+        elif level == "late":
+            return self.late_pma(group_tokens)
+        else:
+            raise ValueError
 
     def project_group(
         self,
         slots: torch.Tensor,
         level: str,
     ) -> torch.Tensor:
-        raise NotImplementedError()
+        if level == "early":
+            return self.early_norm(self.early_proj(torch.flatten(slots, 1)))
+        elif level == "late":
+            return self.late_norm(self.late_proj(torch.flatten(slots, 1)))
+        else:
+            raise ValueError
 
     def forward(
         self,
         hidden_states: list[torch.Tensor],
     ) -> DualLevelCodes:
-        raise NotImplementedError()
+        early_tokens = self.merge_group(hidden_states, self.early_indices)
+        late_tokens = self.merge_group(hidden_states, self.late_indices)
+        early_slots = self.pool_group(early_tokens, "early")
+        late_slots = self.pool_group(late_tokens, "late")
+        early_code = self.project_group(early_slots, "early")
+        late_code = self.project_group(late_slots, "late")
+        dual_level_codes = DualLevelCodes(early_tokens, late_tokens, early_slots, late_slots, early_code, late_code)
+        return dual_level_codes
 
 
 class SemanticConsistencyHead(nn.Module):
     def __init__(
         self,
         code_dim: int,
-        hidden_dim: int | None = None,
+        hidden_dim: int,
     ) -> None:
         super().__init__()
         self.code_dim = code_dim
-        self.hidden_dim = hidden_dim or code_dim
+        self.hidden_dim = hidden_dim
+        self.early_proj1 = nn.Linear(code_dim, hidden_dim)
+        self.early_proj2 = nn.Linear(hidden_dim, code_dim)
+        self.late_proj1 = nn.Linear(code_dim, hidden_dim)
+        self.late_proj2 = nn.Linear(hidden_dim, code_dim)
+        self.early_pred1 = nn.Linear(code_dim, hidden_dim)
+        self.early_pred2 = nn.Linear(hidden_dim, code_dim)
 
     def forward(
         self,
         early_code: torch.Tensor,
         late_code: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Return `(early_shared, late_shared, early_pred)`.
-        """
-        raise NotImplementedError()
+        early_shared = self.early_proj1(early_code)
+        early_shared = F.relu(early_shared)
+        early_shared = self.early_proj2(early_shared)
+        
+        late_shared = self.late_proj1(late_code)
+        late_shared = F.relu(late_shared)
+        late_shared = self.late_proj2(late_shared)
 
+        early_pred = self.early_pred1(early_shared)
+        early_pred = F.relu(early_pred)
+        early_pred = self.early_pred2(early_pred)
+
+        return early_shared, late_shared, early_pred
 
 class DualLevelSelfGuidedTransformer(nn.Module):
     def __init__(
