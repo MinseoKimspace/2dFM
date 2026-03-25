@@ -236,39 +236,63 @@ class DualLevelSelfGuidedTransformer(nn.Module):
         self.pooling_head = pooling_head
         self.consistency_head = consistency_head
 
-    def extract_hidden_states(
-        self,
-        x_t: torch.Tensor,
-        t_start: torch.Tensor,
-        t_now: torch.Tensor | None = None,
-    ) -> TransformerOutput:
-        output = self.backbone(
-            x_t,
-            t_start,
-            t_now,
-            return_hidden_states=True,
-            return_tokens=True,
-            return_dict=True,
-        )
-        if not isinstance(output, TransformerOutput):
-            raise TypeError()
-        return output
-
     def forward(
         self,
         x_t: torch.Tensor,
         t_start: torch.Tensor,
         t_now: torch.Tensor | None = None,
     ) -> DualLevelOutput:
-        output = self.extract_hidden_states(x_t, t_start, t_now)
-        hidden_states = output.hidden_states
+        split_layer = max(self.pooling_head.early_indices) + 1
+
+        tokens = self.backbone.prepare_tokens(x_t, t_start, t_now)
         
-        if hidden_states is None:
-            raise ValueError("Backbone returned no hidden_states.")
-    
-        pooled = self.pooling_head(hidden_states)
-        early_shared, late_shared, early_pred = self.consistency_head(pooled.early_code, pooled.late_code)
-        dual_level_output = DualLevelOutput(output.sample, hidden_states, pooled, early_shared, late_shared, early_pred)
+        early_out = self.backbone.encode_tokens(
+            tokens,
+            return_hidden_states= True,
+            start_layer=0,
+            end_layer=split_layer,
+            cond=None,
+        )
+        early_hidden = early_out.hidden_states
+        if early_hidden is None:
+            raise ValueError()
+        
+        early_tokens = self.pooling_head.merge_group(early_hidden, self.pooling_head.early_indices)
+        early_slots = self.pooling_head.pool_group(early_tokens, "early")
+        early_code = self.pooling_head.project_group(early_slots, "early")
+
+        late_out = self.backbone.encode_tokens(
+            early_out.tokens,
+            return_hidden_states=True,
+            start_layer=split_layer,
+            end_layer=None,
+            cond=early_code,
+        )
+        late_hidden = late_out.hidden_states
+        if late_hidden is None:
+            raise ValueError
+        
+        late_local_indices = [i - split_layer for i in self.pooling_head.late_indices]
+        late_tokens = self.pooling_head.merge_group(late_hidden, late_local_indices)
+        late_slots = self.pooling_head.pool_group(late_tokens, "late")
+        late_code = self.pooling_head.project_group(late_slots, "late")
+
+        pooled = DualLevelCodes(
+            early_tokens=early_tokens,
+            late_tokens=late_tokens,
+            early_slots=early_slots,
+            late_slots=late_slots,
+            early_code=early_code,
+            late_code=late_code
+        )
+        early_shared, late_shared, early_pred = self.consistency_head(
+            early_code,
+            late_code,
+        )
+        sample = self.backbone.decode_tokens(late_out.tokens)
+        full_hidden_states = early_hidden + late_hidden
+        dual_level_output = DualLevelOutput(sample, full_hidden_states, pooled, early_shared, late_shared, early_pred)
+        
         return dual_level_output
 
 def semantic_consistency_loss(
