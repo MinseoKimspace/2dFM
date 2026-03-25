@@ -62,6 +62,37 @@ class AdaLNTransformerBlock(nn.Module):
             nn.init.zeros_(self.ada_proj[-1].weight)
             nn.init.zeros_(self.ada_proj[-1].bias)
 
+    def forward(self, x:torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
+        shift_attn = scale_attn = gate_attn = None
+        shift_mlp = scale_mlp = gate_mlp = None
+
+        if cond is not None and self.ada_proj is not None:
+            shift_attn, scale_attn, gate_attn, shift_mlp, scale_mlp, gate_mlp = self.ada_proj(cond).chunk   (6, dim=-1)
+
+        h = self.norm1(x)
+        if shift_attn is not None:
+            h = _modulate(h, shift_attn, scale_attn)
+
+        attn_out = self.self_attn(h, h, h, need_weights=False)[0]
+
+        if gate_attn is not None:
+            attn_out = gate_attn.unsqueeze(1) * attn_out
+        
+        x = x + self.dropout1(attn_out)
+
+        h = self.norm2(x)
+
+        if shift_mlp is not None:
+            h = _modulate(h, shift_mlp, scale_mlp)
+        
+        mlp_out = self.linear2(self.dropout(self.act(self.linear1(h))))
+        
+        if gate_mlp is not None:
+            mlp_out = gate_mlp.unsqueeze(1) * mlp_out
+        
+        x = x + self.dropout2(mlp_out)
+
+        return x
 class VectorFieldTransformer(nn.Module):
     """Patch-based Transformer that predicts FM/iMF vector fields."""
 
@@ -78,6 +109,7 @@ class VectorFieldTransformer(nn.Module):
         time_embed_dim: int = 128,
         dropout: float = 0.0,
         variant: str = "fm",
+        cond_dim: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -130,6 +162,20 @@ class VectorFieldTransformer(nn.Module):
             batch_first=True,
             norm_first=True,
         )
+        self.layers = nn.ModuleList(
+            [
+                AdaLNTransformerBlock(
+                    d_model=model_dim,
+                    nhead=num_heads,
+                    dim_feedforward=ff_dim,
+                    dropout=dropout,
+                    cond_dim=cond_dim,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+        self.final_norm = None
+        
         self.encoder = nn.TransformerEncoder(
             encoder_layer=encoder_layer,
             num_layers=num_layers,
@@ -174,18 +220,22 @@ class VectorFieldTransformer(nn.Module):
         self,
         tokens: torch.Tensor,
         return_hidden_states: bool = False,
+        start_layer: int = 0,
+        end_layer: int | None = None,
+        cond: torch.Tensor | None = None,
     ) -> EncoderOutput:
         """Run the encoder stack and optionally collect per-layer hidden states."""
         hidden_states: list[torch.Tensor] | None = [] if return_hidden_states else None
         encoded = tokens
 
-        for layer in self.encoder.layers:
-            encoded = layer(encoded)
+        layers = self.layers[start_layer:end_layer]
+        for layer in layers:
+            encoded = layer(encoded, cond=cond)
             if hidden_states is not None:
                 hidden_states.append(encoded)
 
-        if self.encoder.norm is not None:
-            encoded = self.encoder.norm(encoded)
+        if self.final_norm is not None:
+            encoded = self.final_norm(encoded)
 
         return EncoderOutput(tokens=encoded, hidden_states=hidden_states)
 
