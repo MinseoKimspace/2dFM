@@ -236,7 +236,7 @@ class DualLevelSelfGuidedTransformer(nn.Module):
         self.pooling_head = pooling_head
         self.consistency_head = consistency_head
 
-    def forward(
+    def forward_with_aux(
         self,
         x_t: torch.Tensor,
         t_start: torch.Tensor,
@@ -294,6 +294,14 @@ class DualLevelSelfGuidedTransformer(nn.Module):
         dual_level_output = DualLevelOutput(sample, full_hidden_states, pooled, early_shared, late_shared, early_pred)
         
         return dual_level_output
+
+    def forward(
+        self,
+        x_t: torch.Tensor,
+        t_start: torch.Tensor,
+        t_now: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.forward_with_aux(x_t, t_start, t_now).sample
 
 def semantic_consistency_loss(
     early_pred: torch.Tensor,

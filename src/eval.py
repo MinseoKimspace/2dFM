@@ -15,6 +15,11 @@ from data import get_mnist_dataloaders
 from fm.sampler import euler_sample_fm
 from imf.sampler import euler_sample_imf
 from models.mlp import VectorFieldMLP
+from models.pooled_transformer import (
+    DualLevelPoolingHead,
+    DualLevelSelfGuidedTransformer,
+    SemanticConsistencyHead,
+)
 from models.transformer import VectorFieldTransformer
 from utils.grid import save_grid_from_flat
 from utils.logging import load_yaml
@@ -88,6 +93,44 @@ def build_generator(cfg: Dict[str, Any]) -> nn.Module:
             dropout=float(model_cfg.get("dropout", 0.0)),
             variant=mode,
         )
+    if arch == "pooled_transformer":
+        model_dim = int(model_cfg.get("model_dim", model_cfg.get("hidden_dim", 512)))
+        num_layers = int(model_cfg.get("num_layers", 6))
+        num_heads = int(model_cfg.get("num_heads", 8))
+        code_dim = int(model_cfg.get("code_dim", model_dim))
+        pool_heads = int(model_cfg.get("pool_heads", num_heads))
+        early_indices = model_cfg.get("early_indices", list(range(num_layers // 2)))
+        late_indices = model_cfg.get("late_indices", list(range(num_layers // 2, num_layers)))
+
+        backbone = VectorFieldTransformer(
+            input_dim=int(model_cfg.get("input_dim", 784)),
+            model_dim=model_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            ff_dim=int(model_cfg.get("ff_dim", 4 * model_dim)),
+            patch_size=int(model_cfg.get("patch_size", 2)),
+            image_size=int(model_cfg.get("image_size", 28)),
+            in_channels=int(model_cfg.get("in_channels", 1)),
+            time_embed_dim=int(model_cfg.get("time_embed_dim", 128)),
+            dropout=float(model_cfg.get("dropout", 0.0)),
+            variant=mode,
+            cond_dim=code_dim,
+        )
+        pooling_head = DualLevelPoolingHead(
+            num_layers=num_layers,
+            dim=model_dim,
+            pool_heads=pool_heads,
+            early_indices=[int(i) for i in early_indices],
+            late_indices=[int(i) for i in late_indices],
+            early_num_seeds=int(model_cfg.get("early_num_seeds", 4)),
+            late_num_seeds=int(model_cfg.get("late_num_seeds", 1)),
+            code_dim=code_dim,
+        )
+        consistency_head = SemanticConsistencyHead(
+            code_dim=code_dim,
+            hidden_dim=int(model_cfg.get("consistency_hidden_dim", code_dim)),
+        )
+        return DualLevelSelfGuidedTransformer(backbone, pooling_head, consistency_head)
     raise ValueError(f"Unknown model.arch: {arch}")
 
 

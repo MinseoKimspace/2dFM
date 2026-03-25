@@ -190,6 +190,10 @@ class VectorFieldTransformer(nn.Module):
         if self.variant == "imf":
             nn.init.normal_(self.u_head.weight, mean=0.0, std=1e-3)
             nn.init.zeros_(self.u_head.bias)
+        for layer in self.layers:
+            if layer.ada_proj is not None:
+                nn.init.zeros_(layer.ada_proj[-1].weight)
+                nn.init.zeros_(layer.ada_proj[-1].bias)
 
     def prepare_tokens(
         self,
