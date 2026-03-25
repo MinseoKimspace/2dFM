@@ -37,6 +37,30 @@ def _init_linear_conservative(module: nn.Module) -> None:
         if module.bias is not None:
             nn.init.zeros_(module.bias)
 
+def _modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+    return x * (1.0 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+class AdaLNTransformerBlock(nn.Module):
+    def __init__(self, d_model: int, nhead: int, dim_feedforward: int, dropout: float, cond_dim: int | None):
+        super().__init__()
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.act = nn.GELU()
+        self.ada_proj = None
+
+        if cond_dim is not None:
+            self.ada_proj = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(cond_dim, 6 * d_model),
+            )
+            nn.init.zeros_(self.ada_proj[-1].weight)
+            nn.init.zeros_(self.ada_proj[-1].bias)
 
 class VectorFieldTransformer(nn.Module):
     """Patch-based Transformer that predicts FM/iMF vector fields."""
