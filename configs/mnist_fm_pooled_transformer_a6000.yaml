@@ -1,0 +1,62 @@
+experiment:
+  name: mnist_fm_pooled_transformer_a6000
+  mode: fm
+  output_dir: runs
+  seed: 42
+  deterministic: true
+  device: cuda
+
+data:
+  root: data
+  batch_size: 256
+  num_workers: 4
+  pin_memory: true
+
+model:
+  arch: pooled_transformer
+  input_dim: 784
+  model_dim: 512
+  num_layers: 8
+  num_heads: 8
+  ff_dim: 2048
+  patch_size: 2
+  image_size: 28
+  in_channels: 1
+  time_embed_dim: 256
+  dropout: 0.0
+  code_dim: 256
+  pool_heads: 8
+  early_indices: [0, 1, 2, 3]
+  late_indices: [4, 5, 6, 7]
+  early_num_seeds: 4
+  late_num_seeds: 1
+  consistency_hidden_dim: 256
+
+training:
+  epochs: 60
+  lr: 0.0001
+  warmup_epochs: 5
+  weight_decay: 0.0
+  betas: [0.9, 0.95]
+  grad_clip: 1.0
+  amp: true
+  log_every: 50
+  sample_every: 1000
+  semantic_consistency_weight: 0.1
+  collapse_regularization_weight: 0.1
+  max_steps: null
+
+sampling:
+  sample_batch_size: 128
+  nfe_log: [1, 4, 8, 20]
+  nfe_default: 20
+  nfe_choices: [1, 2, 4, 8, 16, 20, 50]
+
+wandb:
+  project: mnist-flow-matching
+  entity: null
+  enabled: true
+
+ema:
+  use: true
+  decay: 0.9999
