@@ -215,6 +215,8 @@ def main() -> None:
     grad_clip = float(train_cfg.get("grad_clip", 0.0))
     log_every = int(train_cfg.get("log_every", 50))
     sample_every = int(train_cfg.get("sample_every", 500))
+    semantic_weight = float(train_cfg.get("semantic_consistency_weight", 0.0))
+    collapse_weight = float(train_cfg.get("collapse_regularization_weight", 0.0))
     max_steps = train_cfg.get("max_steps", None)
     if max_steps is not None:
         max_steps = int(max_steps)
@@ -240,9 +242,19 @@ def main() -> None:
 
             with torch.amp.autocast(device_type=device.type, enabled=amp_enabled) if amp_enabled else nullcontext():
                 if mode == "fm":
-                    loss, metrics = fm_velocity_loss(model, x1)
+                    loss, metrics = fm_velocity_loss(
+                        model,
+                        x1,
+                        w_sc=semantic_weight,
+                        w_cr=collapse_weight,
+                    )
                 elif mode == "imf":
-                    loss, metrics = imf_velocity_loss(model, x1)
+                    loss, metrics = imf_velocity_loss(
+                        model,
+                        x1,
+                        semantic_weight=semantic_weight,
+                        collapse_weight=collapse_weight,
+                    )
                 else:
                     raise ValueError(f"Unknown mode: {mode}")
 

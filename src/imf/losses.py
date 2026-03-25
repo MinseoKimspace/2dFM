@@ -7,10 +7,13 @@ import torch
 
 from imf.paths import linear_path, sample_time_pair
 from torch.nn.attention import sdpa_kernel, SDPBackend
+from models.pooled_transformer import semantic_consistency_loss, collapse_regularization_loss
 
 def imf_velocity_loss(
     model: torch.nn.Module,
     x1: torch.Tensor,
+    semantic_weight=0.0,
+    collapse_weight=0.0,
 ) -> Tuple[torch.Tensor, Dict[str, float]]:
     batch = x1.size(0)
 
@@ -20,10 +23,25 @@ def imf_velocity_loss(
     z = linear_path(x1, e, t)
 
     V = compute_V(model=model, z=z, r=r, t=t)
-    
-    loss = torch.nn.functional.mse_loss(V, e - x1)
-    metrics = {"loss": float(loss.detach().item()), "v_mse": float(loss.detach().item())}
 
+    base_loss = torch.nn.functional.mse_loss(V, e - x1)
+    loss = base_loss
+    sc_loss = torch.zeros((), device=x1.device, dtype=x1.dtype)
+    cr_loss = torch.zeros((), device=x1.device, dtype=x1.dtype)
+
+    if hasattr(model, "forward_with_aux") and (semantic_weight > 0 or collapse_weight > 0):
+        aux = model.forward_with_aux(z, r, t)
+        sc_loss = semantic_consistency_loss(aux.early_pred, aux.late_shared)
+        cr_loss = collapse_regularization_loss(aux.early_shared, aux.late_shared)
+
+        loss = base_loss + semantic_weight * sc_loss + collapse_weight * cr_loss
+
+    metrics = {
+        "loss": float(loss.detach().item()),
+        "v_mse": float(base_loss.detach().item()),
+        "semantic_consistency_loss": float(sc_loss.detach().item()),
+        "collapse_regularization_loss": float(cr_loss.detach().item()),
+    }
     return loss, metrics
 
 def compute_V(model, z, r, t):
