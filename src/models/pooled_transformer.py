@@ -307,7 +307,9 @@ def semantic_consistency_loss(
     early_pred: torch.Tensor,
     late_shared: torch.Tensor,
 ) -> torch.Tensor:
-    return F.mse_loss(early_pred, late_shared.detach())
+    a = F.normalize(early_pred, dim=-1)
+    b = F.normalize(late_shared.detach(), dim=-1)
+    return F.mse_loss(a, b)
 
 def collapse_regularization_loss(
     early_shared: torch.Tensor,
