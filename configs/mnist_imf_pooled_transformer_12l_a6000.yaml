@@ -28,8 +28,8 @@ model:
   pool_heads: 8
   early_indices: [3, 4, 5]
   late_indices: [9, 10, 11]
-  early_num_seeds: 4
-  late_num_seeds: 1
+  early_num_seeds: 8
+  late_num_seeds: 4
   consistency_hidden_dim: 256
 
 training:
