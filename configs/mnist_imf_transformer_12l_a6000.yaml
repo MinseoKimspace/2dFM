@@ -1,5 +1,5 @@
 experiment:
-  name: mnist_imf_pooled_transformer_a6000
+  name: mnist_imf_transformer_12l_a6000
   mode: imf
   output_dir: runs
   seed: 42
@@ -8,15 +8,15 @@ experiment:
 
 data:
   root: data
-  batch_size: 96
+  batch_size: 48
   num_workers: 4
   pin_memory: true
 
 model:
-  arch: pooled_transformer
+  arch: transformer
   input_dim: 784
   model_dim: 384
-  num_layers: 6
+  num_layers: 12
   num_heads: 8
   ff_dim: 1536
   patch_size: 2
@@ -24,13 +24,6 @@ model:
   in_channels: 1
   time_embed_dim: 256
   dropout: 0.0
-  code_dim: 256
-  pool_heads: 8
-  early_indices: [0, 1, 2]
-  late_indices: [3, 4, 5]
-  early_num_seeds: 4
-  late_num_seeds: 1
-  consistency_hidden_dim: 256
 
 training:
   epochs: 80
@@ -42,8 +35,8 @@ training:
   amp: true
   log_every: 50
   sample_every: 500
-  semantic_consistency_weight: 0.1
-  collapse_regularization_weight: 0.1
+  semantic_consistency_weight: 0.0
+  collapse_regularization_weight: 0.0
   max_steps: null
 
 sampling:

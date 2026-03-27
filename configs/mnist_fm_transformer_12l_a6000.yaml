@@ -1,5 +1,5 @@
 experiment:
-  name: mnist_fm_transformer_a6000
+  name: mnist_fm_transformer_12l_a6000
   mode: fm
   output_dir: runs
   seed: 42
@@ -8,7 +8,7 @@ experiment:
 
 data:
   root: data
-  batch_size: 256
+  batch_size: 192
   num_workers: 4
   pin_memory: true
 
@@ -16,7 +16,7 @@ model:
   arch: transformer
   input_dim: 784
   model_dim: 512
-  num_layers: 8
+  num_layers: 12
   num_heads: 8
   ff_dim: 2048
   patch_size: 2
