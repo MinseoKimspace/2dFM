@@ -9,7 +9,7 @@ from typing import Any, Dict
 import torch
 
 from fm.sampler import euler_sample_fm
-from imf.sampler import euler_sample_imf
+from imf.sampler import euler_sample_imf, mean_velocity_sample_imf
 from models.mlp import VectorFieldMLP
 from models.pooled_transformer import (
     DualLevelPoolingHead,
@@ -29,6 +29,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_samples", type=int, default=256, help="Total samples to generate.")
     parser.add_argument("--batch_size", type=int, default=256, help="Sampling batch size.")
     parser.add_argument("--out_dir", type=str, default="sample_outputs", help="Output directory.")
+    parser.add_argument(
+        "--imf_sampler",
+        type=str,
+        choices=["velocity", "mean"],
+        default="velocity",
+        help="IMF sampler mode to use during sample generation.",
+    )
     parser.add_argument(
         "--use_ema",
         action="store_true",
@@ -120,12 +127,21 @@ def sample_batch(
     device: torch.device,
     batch_size: int,
     nfe: int,
+    imf_sampler: str,
 ) -> torch.Tensor:
     mode = cfg["experiment"]["mode"]
     dim = int(cfg["model"].get("input_dim", 784))
 
     if mode == "fm":
         return euler_sample_fm(model, num_samples=batch_size, dim=dim, device=device, nfe=nfe)
+    if imf_sampler == "mean":
+        return mean_velocity_sample_imf(
+            model,
+            num_samples=batch_size,
+            dim=dim,
+            device=device,
+            nfe=nfe,
+        )
     return euler_sample_imf(
         model,
         num_samples=batch_size,
@@ -156,16 +172,28 @@ def main() -> None:
     remaining = int(args.num_samples)
     while remaining > 0:
         bs = min(int(args.batch_size), remaining)
-        chunks.append(sample_batch(model=model, cfg=cfg, device=device, batch_size=bs, nfe=nfe).cpu())
+        chunks.append(
+            sample_batch(
+                model=model,
+                cfg=cfg,
+                device=device,
+                batch_size=bs,
+                nfe=nfe,
+                imf_sampler=args.imf_sampler,
+            ).cpu()
+        )
         remaining -= bs
 
     samples = torch.cat(chunks, dim=0)
 
-    tensor_path = out_dir / f"samples_n{args.num_samples}_nfe{nfe}.pt"
-    image_path = out_dir / f"grid_n{args.num_samples}_nfe{nfe}.png"
+    sampler_suffix = f"_{args.imf_sampler}" if cfg["experiment"]["mode"] == "imf" else ""
+    tensor_path = out_dir / f"samples_n{args.num_samples}_nfe{nfe}{sampler_suffix}.pt"
+    image_path = out_dir / f"grid_n{args.num_samples}_nfe{nfe}{sampler_suffix}.png"
     torch.save(samples, tensor_path)
     save_grid_from_flat(samples[:64], image_path, nrow=8)
 
+    if cfg["experiment"]["mode"] == "imf":
+        print(f"IMF sampler:  {args.imf_sampler}")
     print(f"Saved tensor: {tensor_path}")
     print(f"Saved grid:   {image_path}")
 

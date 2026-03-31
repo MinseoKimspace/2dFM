@@ -13,7 +13,7 @@ import torch.optim as optim
 
 from data import get_mnist_dataloaders
 from fm.sampler import euler_sample_fm
-from imf.sampler import euler_sample_imf
+from imf.sampler import euler_sample_imf, mean_velocity_sample_imf
 from models.mlp import VectorFieldMLP
 from models.pooled_transformer import (
     DualLevelPoolingHead,
@@ -52,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_gen_samples", type=int, default=2000)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--nfe", type=int, default=None)
+    parser.add_argument("--imf_sampler", type=str, choices=["velocity", "mean"], default="velocity")
     parser.add_argument("--use_ema", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out_dir", type=str, default="eval_outputs")
@@ -191,6 +192,7 @@ def generate_samples(
     total_samples: int,
     batch_size: int,
     nfe: int,
+    imf_sampler: str,
 ) -> torch.Tensor:
     mode = cfg["experiment"]["mode"]
     dim = int(cfg["model"].get("input_dim", 784))
@@ -202,13 +204,22 @@ def generate_samples(
         if mode == "fm":
             x = euler_sample_fm(model, num_samples=bs, dim=dim, device=device, nfe=nfe)
         else:
-            x = euler_sample_imf(
-                model,
-                num_samples=bs,
-                dim=dim,
-                device=device,
-                nfe=nfe,
-            )
+            if imf_sampler == "mean":
+                x = mean_velocity_sample_imf(
+                    model,
+                    num_samples=bs,
+                    dim=dim,
+                    device=device,
+                    nfe=nfe,
+                )
+            else:
+                x = euler_sample_imf(
+                    model,
+                    num_samples=bs,
+                    dim=dim,
+                    device=device,
+                    nfe=nfe,
+                )
         chunks.append(x.cpu())
         remaining -= bs
     return torch.cat(chunks, dim=0)
@@ -268,14 +279,18 @@ def main() -> None:
         total_samples=args.num_gen_samples,
         batch_size=args.batch_size,
         nfe=nfe,
+        imf_sampler=args.imf_sampler,
     )
 
     metrics = generated_proxy_metrics(classifier, x_gen, device)
     metrics["real_test_acc"] = real_acc
     metrics["nfe"] = float(nfe)
-    save_grid_from_flat(x_gen[:64], out_dir / f"eval_grid_nfe{nfe}.png", nrow=8)
+    sampler_suffix = f"_{args.imf_sampler}" if cfg["experiment"]["mode"] == "imf" else ""
+    save_grid_from_flat(x_gen[:64], out_dir / f"eval_grid_nfe{nfe}{sampler_suffix}.png", nrow=8)
 
     print("Evaluation summary:")
+    if cfg["experiment"]["mode"] == "imf":
+        print(f"imf_sampler: {args.imf_sampler}")
     for key, value in metrics.items():
         print(f"{key}: {value:.6f}")
 

@@ -31,6 +31,30 @@ def euler_sample_imf(
 
 
 @torch.no_grad()
+def mean_velocity_sample_imf(
+    model: torch.nn.Module,
+    num_samples: int,
+    dim: int,
+    device: torch.device,
+    nfe: int = 1,
+    x_init: torch.Tensor | None = None,
+) -> torch.Tensor:
+    if nfe <= 0:
+        raise ValueError("nfe must be positive.")
+
+    x = x_init.clone().to(device) if x_init is not None else torch.randn(num_samples, dim, device=device)
+    model.eval()
+    for i in range(nfe):
+        t_val = 1.0 - i / float(nfe)
+        r_val = 1.0 - (i + 1) / float(nfe)
+        t = torch.full((x.size(0), 1), t_val, device=device, dtype=x.dtype)
+        r = torch.full((x.size(0), 1), r_val, device=device, dtype=x.dtype)
+        u = model(x, r, t)
+        x = x - (t - r) * u
+    return x
+
+
+@torch.no_grad()
 def one_step_sample_imf(
     model: torch.nn.Module,
     num_samples: int,

@@ -42,8 +42,8 @@ training:
   amp: true
   log_every: 50
   sample_every: 500
-  semantic_consistency_weight: 0.1
-  collapse_regularization_weight: 0.1
+  semantic_consistency_weight: 0.0
+  collapse_regularization_weight: 0.0
   max_steps: null
 
 sampling:
